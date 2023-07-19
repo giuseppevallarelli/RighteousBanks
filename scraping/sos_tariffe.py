@@ -1,5 +1,6 @@
 from csv import DictWriter
 import math
+from pathlib import Path
 import re
 import time
 
@@ -89,8 +90,8 @@ def retrieve_banks_reviews(web_driver, bank_boxes_details):
     return revs
 
 
-def serialize_to_csv(reviews, file_name='reviews.csv'):
-    with open(f'./{file_name}', 'w') as csv_file:
+def serialize_to_csv(reviews, file_name):
+    with open(file_name, 'w') as csv_file:
         fieldnames = ['bank', 'user_name', 'title', 'date', 'review', 'home_banking', 'security', 'support',
                       'promotions', 'services', 'local_presence']
         writer = DictWriter(csv_file, fieldnames=fieldnames)
@@ -115,4 +116,7 @@ if __name__ == '__main__':
     bank_boxes_details = [bank_details(box) for box in bank_boxes]
     reviews = retrieve_banks_reviews(wd, bank_boxes_details)
     # Serialize to csv
-    serialize_to_csv(reviews)
+    root_folder = Path(__file__).parent.parent
+    data_dir = Path(root_folder, 'data')
+    fname = f'{data_dir}/reviews.csv'
+    serialize_to_csv(reviews, fname)
