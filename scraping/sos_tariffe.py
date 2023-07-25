@@ -10,13 +10,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 
-def build_web_driver():
+def build_web_driver(headless=True):
     chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument("--headless")
+    if headless:
+        chrome_options.add_argument("--headless")
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
-    wd = webdriver.Chrome(options=chrome_options)
-    return wd
+    return webdriver.Chrome(options=chrome_options)
 
 
 def bank_details(html_element):
@@ -31,7 +31,7 @@ def bank_details(html_element):
     return bank_name, url, num_reviews
 
 
-def extract_data_reviews(web_driver, review_page):
+def extract_data_reviews(web_driver):
     def category_score(html_elem, category_class):
         container = html_elem.find_element(By.CLASS_NAME, category_class)
         rating_score_raw_str = container.find_element(By.CLASS_NAME, 'full-stars').get_attribute('style')
@@ -41,7 +41,6 @@ def extract_data_reviews(web_driver, review_page):
             raise RuntimeError(f'Failure for {category_class}')
         return rating_score
 
-    web_driver.get(review_page)
     comments = web_driver.find_elements(By.CLASS_NAME, 'comments')
     reviews = []
     for com in comments:
@@ -62,28 +61,31 @@ def extract_data_reviews(web_driver, review_page):
     return reviews
 
 
-def bank_reviews(web_driver, company_page, num_reviews):
-    company_rews = []
-    reviews_per_page = 10
-    if num_reviews > reviews_per_page:
-        num_clicks = math.ceil(num_reviews / reviews_per_page)
-        for i in range(0, num_clicks):
-            company_rews += extract_data_reviews(web_driver, company_page)
+def bank_reviews(web_driver, company_page, num_reviews, reviews_per_page=10):
+    def expand_page_show_more_comments(num_reviews, reviews_per_page):
+        show_more_comments_num_clicks = math.ceil(num_reviews / reviews_per_page)
+        for i in range(0, show_more_comments_num_clicks):
             try:
                 element = WebDriverWait(web_driver, 10).until(
                     EC.visibility_of_element_located((By.CLASS_NAME, 'show-more-btn')))
                 element.click()
+                time.sleep(1)
+                # Scroll to the end page
+                web_driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             except Exception as e:
                 print(f'Failed for {company_page}: page {i}')
-    else:
-        company_rews = extract_data_reviews(web_driver, company_page)
+    
+    web_driver.get(company_page)
+    if num_reviews > reviews_per_page:
+        expand_page_show_more_comments(num_reviews, reviews_per_page)
 
-    return company_rews
+    return extract_data_reviews(web_driver)
 
 
 def retrieve_banks_reviews(web_driver, bank_boxes_details):
     revs = {}
     for name, web_page, num_revs in bank_boxes_details:
+        print(f'Working bank: {name}')
         if num_revs:
             revs[name] = bank_reviews(web_driver, web_page, num_revs)
             time.sleep(1)
@@ -116,7 +118,8 @@ if __name__ == '__main__':
     bank_boxes_details = [bank_details(box) for box in bank_boxes]
     reviews = retrieve_banks_reviews(wd, bank_boxes_details)
     # Serialize to csv
-    root_folder = Path(__file__).parent.parent
-    data_dir = Path(root_folder, 'data')
+    root_dir = Path(__file__).parent.parent
+    data_dir = Path(root_dir, 'data')
+    data_dir.mkdir(exist_ok=True)
     fname = f'{data_dir}/reviews.csv'
     serialize_to_csv(reviews, fname)
